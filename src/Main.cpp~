@@ -1,0 +1,97 @@
+#include <iostream>
+#include <string>
+#include <boost/filesystem.hpp>
+#include <vector>
+#include "Image.h"
+
+//using namespace std;
+using namespace std;
+using namespace cv;
+
+namespace fs = boost::filesystem;
+
+//Display options
+int main() {
+  cout << "EAP Strain Image Processing\n\n";
+  cout << "Enter path to folder you wish to process\n";
+
+  bool flag = false;
+  std::string Path;
+  /*
+  while (flag == false){
+    getline(std::cin, Path);
+    fs::path p (Path);
+    if (fs::exists(p)){
+      if (fs::is_directory(p)){
+	flag = true;
+      }
+      else{
+	cout << "Path is not a directory, please tr yagain\n";
+      }
+    }
+    else{
+      cout<< "Path does not exist, please try again\n";
+    }
+  }
+  */
+  Path = "/home/mani/School/Research/Soft Robot/Code/ImageProcessing/Video/";
+  fs::path p (Path);
+
+  fs::directory_iterator end_itr;
+
+  int counter = 0;
+  vector<Point> pnts;
+  Point center;
+
+  for (fs::directory_iterator itr(p); itr != end_itr; ++itr){
+
+    string path = fs::canonical(itr->path()).string();
+    string title = itr->path().filename().string();
+    vector<double> pixDist;
+
+    Image *img;
+    img = new Image(path, title);
+
+    counter++;
+
+    if (counter == 2){
+      cout << itr->path().string() << endl;
+      pnts = img->blob(20000,50000);
+      center = pnts[0];
+      //      checkCenters(pnts, *img);
+    }
+
+    if (counter == 2){// && counter%10 == 0){
+      img->crop(center,300);
+      img->display("original");
+      img->thresh(70);
+      img->display("binary");
+      img->cannyDetect(5000,17500,5);
+      //img->houghDetect(1, CV_PI/180,1,val,5);
+      img->edgeFind(110);
+      img->cornerFind();
+      img->splitContour();
+      img->display("edges");
+      cout << "t1\n";
+      //  pixDist = img->findStrains();
+      cout << "t5\n";
+      img->display("contours");
+      //      cout << "Frame " << counter << ", Xdist = " << pixDist[0] << ", Ydist = " << pixDist[1] << endl;
+    }
+    delete img;
+  }
+
+  char opt;
+  cout << "Would you like to quit?\n";
+  cin >> opt;
+}
+
+/*
+void checkCenters(vector<Point> pnts, Image *img){
+  cout << pnts.size() << " blobs found\n";
+  for (int i = 0; i<pnts.size(); i++){
+    cout << "Blob " << i << " (X,Y)\n";
+    cout << pnts[i].x << ", " << pnts[i].y<< endl;
+    img->drawCircle(pnts[i],300);
+  }
+  }*/
