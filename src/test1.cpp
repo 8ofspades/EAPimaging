@@ -2,6 +2,7 @@
 #include <boost/filesystem.hpp>
 using namespace boost::filesystem;
 
+//simple code to run testcases
 int main(int argc, char* argv[])
 {
   if (argc < 2)

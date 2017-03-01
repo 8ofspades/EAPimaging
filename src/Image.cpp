@@ -19,7 +19,7 @@ void Image::display(string type){
   //  namedWindow(title, WINDOW_AUTOSIZE);
   if (type.compare("original") == 0){
     imshow("title",img);
-    cvWaitKey(30);
+    cvWaitKey(30); //wait for user input
   }
   if (type.compare("binary") == 0){
     imshow("binary",bin);
@@ -50,10 +50,11 @@ void Image::crop(Point pnt, int size){
   img = roi;
 }
 
-//Implements a blob detector to identify the eap from shadows in the image
+//Implements a blob detector to identify the eap from shadows in the image, filters out random noise and extra dark bits that are not part of the EAP
 //Returns the center of the EAP
 vector<Point> Image::blob(float min, float max){
   SimpleBlobDetector::Params params;
+  //set blob detection parameters, focuses on the high contrast between the black EAP and the white background
   params.minDistBetweenBlobs = 100.0;
   params.filterByInertia = false;
   params.filterByConvexity = false;
@@ -64,12 +65,14 @@ vector<Point> Image::blob(float min, float max){
   params.maxArea = max;
   params.blobColor = 0;
 
+  //run block detection algorithm
   SimpleBlobDetector blob_detector(params);
 
+  //add xy points found by the blob detection algorithm in a sorted list coords
   vector<KeyPoint> key;
   vector<Point> coords;
-  blob_detector.detect(img,key);
-
+  blob_detector.detect(img, key);
+  
   for (int i = 0; i<key.size(); i++){
     coords.push_back(key[i].pt);
   }
@@ -77,26 +80,27 @@ vector<Point> Image::blob(float min, float max){
   return coords;
 }
 
+//Draw a circle on the image for a selected point and radius
 void Image::drawCircle(Point pnt,int r){
-  circle(img,pnt,r, Scalar(120, 130, 20), 2, 8);
+  circle(img, pnt, r, Scalar(120, 130, 20), 2, 8);
 }
 
 //Implements canny algorithm to find edge points
 void Image::cannyDetect(int thr1, int thr2, int aptSz){
-  Canny(bin,edges,thr1,thr2,aptSz);
+  Canny(bin,edges,thr1,thr2,aptSz); //find edges
   Mat map = bin.clone();
   map = Scalar::all(255);
   bin.copyTo(map, edges);
-  imshow("map",map);
+  imshow("map",map); //display black edges on a white background
   cvWaitKey(30);
 }
 
-//hough detection algorthim for lines in an image
+//hough detection algorthim for lines in an image, simpler approximation to find the rectangular bounds of the EAP, used for troubleshooting
 void Image::houghDetect(double rho, double theta, int thr, int minLength, int maxGap){
   Canny(bin,bin,0,1000,3,true);
-  HoughLinesP(bin,lines,rho,theta,thr,minLength,maxGap);
+  HoughLinesP(bin,lines,rho,theta,thr,minLength,maxGap); 
   for (size_t i = 0; i < lines.size(); i++){
-    line(color_bin, Point(lines[i][0], lines[i][1]), Point(lines[i][2],lines[i][3]), Scalar(0,0,255),1,8);
+    line(color_bin, Point(lines[i][0], lines[i][1]), Point(lines[i][2],lines[i][3]), Scalar(0,0,255),1,8); //draw lines on the image
   }
 }
 
@@ -105,41 +109,38 @@ void Image::houghDetect(double rho, double theta, int thr, int minLength, int ma
 void Image::edgeFind(int level){
   vector<vector<Point>> test(1);
   Canny(bin,bin,5000,17500,5);
-  findContours(bin, contours, order, CV_RETR_EXTERNAL, CV_CHAIN_APPROX_SIMPLE);
+  findContours(bin, contours, order, CV_RETR_EXTERNAL, CV_CHAIN_APPROX_SIMPLE); //use simple chain approximation to find contours in the image
   edges = color_bin.clone();
   drawContours(edges,contours,-1, Scalar(0,0,255),2,8);
   for (int i = 0; i < contours.size(); i++){
     int contSize = contours[i].size();
+    //filter out all contours that fall below the input level
     if (contSize >= level){
-      contour.insert(contour.end(),contours[i].begin(),contours[i].end());
-      drawContours(color_bin,contours,i, Scalar(0,0,255),4,8);
+      contour.insert(contour.end(), contours[i].begin(), contours[i].end());
+      drawContours(color_bin, contours, i, Scalar(0, 0, 255), 4, 8);
     }
   }
 }
 
 //draws a box from the most extreme corners of the EAP and turns it into 4 OpenCV contours
 void Image::cornerFind(){
-  cout << "t1\n";
   //  RotatedRect bounds = minAreaRect(contour);
   Rect bounds = boundingRect(contour);
-  cout << "t2\n";
   Point2f boxCorners[4];
   Point2f eapCorners[4];
   vector<Point> side;
-  vector<double> bAvg = {0,0,1000,1000};
-  bounds.points(boxCorners);
+  vector<double> bAvg = {0, 0, 1000, 1000};
+  bounds.points(boxCorners); //find corners of the bounding rectangle
   for( int i = 0; i < 4; i++ ){
-    eapCorners[i] = closestPoint(boxCorners[i]);
-    cout << "t4\n";
+    eapCorners[i] = closestPoint(boxCorners[i]); //find closest point of the EAP to the 4 corners
   }
-  cout << "t3\n";
 
   for( int i = 0; i < 4; i++ ){
     vector<vector<Point>>::iterator it = sides.end();
     vector<vector<Point>>::iterator it2 = realSides.end();
-    line(color_bin, boxCorners[i], boxCorners[(i+1)%4], Scalar(0,255,0));
-    line(color_bin, eapCorners[i], eapCorners[(i+1)%4], Scalar(0,0,255));
-    side = createContour(eapCorners[i], eapCorners[(i+1)%4]);
+    line(color_bin, boxCorners[i], boxCorners[(i + 1) % 4], Scalar(0, 255, 0)); //Draw lines of bounding box
+    line(color_bin, eapCorners[i], eapCorners[(i + 1) % 4], Scalar(0, 0, 255)); //draw lines of the actual EAP corners
+    side = createContour(eapCorners[i], eapCorners[(i + 1) % 4]);
     sides.insert(it, side);
     realSides.insert(it2, side);
     realSides[i].clear();
@@ -158,16 +159,16 @@ Point Image::closestPoint(Point corner){
   double min = 100;
   int index;
   for ( int i = 0; i < contour.size(); i++ ){
-    double dif = norm(corner-contour[i]);
+    double dif = norm(corner-contour[i]); //norm of the contour and EAP points
     if ( dif < min ){
-      min = dif;
-      index = i;
+      min = dif; //store smallest difference
+      index = i; //index of smallest difference location
     }
   }
   return contour[index];
 }
 
-//Creates a contour from 2 points
+//Creates a contour from 2 points (vector of two points)
 vector<Point> Image::createContour(Point start, Point end){
   vector<Point> cnt;
   cnt.push_back(start);
@@ -175,25 +176,29 @@ vector<Point> Image::createContour(Point start, Point end){
   return cnt;
 }
 
-//Spilts the sinlge EAP contour into distinct contours for each side
+//Splits the sinlge EAP contour into distinct contours for each side
 void Image::splitContour(){
   map<double,int> order;
   // vector<vector<Point>> realSides(4);
   for (int i = 0; i<contour.size(); i++){
+    // cut off one side of the contour and place it in its own sorted map
     for (int j = 0; j<4; j++){
       order[abs(pointPolygonTest(sides[j], contour[i], true))] = j;
     }
-    realSides[order.begin()->second].push_back(contour[i]);
+    realSides[order.begin()->second].push_back(contour[i]); //re-order new contour
     order.clear();
   }
+
+  //Draw contours with 4 disctinct colors to show contour seperation
   for (int i = 0; i < realSides.size(); i++){
     int r1 = rand() % 255;
     int r2 = rand() % 255;
     int r3 = rand() % 255;
-    drawContours(color_bin,realSides,i, Scalar(r1,r2,r3),2,8);
+    drawContours(color_bin, realSides, i, Scalar(r1, r2, r3), 2, 8);
   }
 }
 
+//Compute strains by taking the difference of changing side contours over time
 vector<double> Image::findStrains(){
   map<double,int> x;
   map<double,int> y;
@@ -201,18 +206,21 @@ vector<double> Image::findStrains(){
   double yDist;
   double Avg[4];
   double avg;
+  //compute avg x & y coordinates for each side
   for (int i = 0; i < 4; i++){
-    x[findAvg(&realSides[i],'x')] = i;
-    y[findAvg(&realSides[i],'y')] = i;
+    x[findAvg(&realSides[i], 'x')] = i;
+    y[findAvg(&realSides[i], 'y')] = i;
   }
   //  cout << "xmin = " << x.rbegin()->first << ", xmax = " << x.begin()->first << endl;
   //  cout << "ymin = " << y.rbegin()->first << ", ymax = " << y.begin()->first << endl;
+  //compute difference between average sides accross two images
   xDist = abs(x.begin()->first - x.rbegin()->first);
   yDist = abs(y.begin()->first - y.rbegin()->first);
   vector<double> v {xDist, yDist};
   return v;
 }
 
+//Find the average x or y location for a contour
 double Image::findAvg(vector<Point>* pnts, char dim){
   double avg = 0;
   //  cout << "# of pnts = " << pnts->size() << endl;
